@@ -21,62 +21,62 @@ A 24/7 YouTube live stream system that generates continuous Indian lofi music us
 
 ```mermaid
 flowchart TD
-    A[main.py] --> B[StreamOrchestrator.run()]
+    A[main.py] --> B[StreamOrchestrator.run]
     B --> C[Start Generator Process]
     B --> D[Start Feeder Process]
     B --> E[Monitor System]
     
     C --> F[audio_generator.py]
-    F --> G[AudioGenerator.__init__()]
+    F --> G[AudioGenerator.init]
     G --> H[Load BufferManager]
     G --> I[Create AudioCraft Script]
     
-    F --> J[run_generation_loop()]
-    J --> K[buffer_manager.get_buffer_status()]
+    F --> J[run_generation_loop]
+    J --> K[buffer_manager.get_buffer_status]
     K --> L{Buffer Health?}
-    L -->|DEPLETED & Empty| M[Continue Generation]
-    L -->|DEPLETED & Has Chunks| N[Stop Generation]
+    L -->|DEPLETED and Empty| M[Continue Generation]
+    L -->|DEPLETED and Has Chunks| N[Stop Generation]
     L -->|HEALTHY/WARNING/CRITICAL| M
     
-    M --> O[buffer_manager.get_next_prompt_index()]
-    O --> P[generate_chunk()]
-    P --> Q[Subprocess: AudioCraft Generation]
-    Q --> R[audio_write() - Save WAV]
-    R --> S[buffer_manager.add_chunk()]
+    M --> O[buffer_manager.get_next_prompt_index]
+    O --> P[generate_chunk]
+    P --> Q[Subprocess AudioCraft Generation]
+    Q --> R[audio_write Save WAV]
+    R --> S[buffer_manager.add_chunk]
     S --> T[Take Break Based on Health]
     T --> J
     
     D --> U[stream_feeder.py]
-    U --> V[StreamFeeder.__init__()]
+    U --> V[StreamFeeder.init]
     V --> W[Load BufferManager]
     
-    U --> X[stream_to_stdout()]
-    X --> Y[buffer_manager.get_next_chunk()]
+    U --> X[stream_to_stdout]
+    X --> Y[buffer_manager.get_next_chunk]
     Y --> Z{Chunk Available?}
     Z -->|No| AA[Wait 5 seconds]
     AA --> Y
-    Z -->|Yes| BB[should_add_break()]
+    Z -->|Yes| BB[should_add_break]
     BB -->|Yes| CC[Add 3-second Silence]
     BB -->|No| DD[Stream Chunk]
     CC --> DD
-    DD --> EE[read_audio_chunk()]
+    DD --> EE[read_audio_chunk]
     EE --> FF[Simulate Streaming]
-    FF --> GG[buffer_manager.mark_chunk_consumed()]
+    FF --> GG[buffer_manager.mark_chunk_consumed]
     GG --> X
     
     H --> HH[buffer_manager.py]
-    HH --> II[BufferManager.__init__()]
-    II --> JJ[load_metadata()]
+    HH --> II[BufferManager.init]
+    II --> JJ[load_metadata]
     JJ --> KK[buffer_metadata.json]
     
-    HH --> LL[Key Functions:]
-    LL --> MM[add_chunk() - Add new chunk]
-    LL --> NN[get_next_chunk() - Get unconsumed chunk]
-    LL --> OO[get_buffer_status() - Health monitoring]
-    LL --> PP[mark_chunk_consumed() - Mark as streamed]
-    LL --> QQ[cleanup_consumed_chunks() - File cleanup]
+    HH --> LL[Key Functions]
+    LL --> MM[add_chunk]
+    LL --> NN[get_next_chunk]
+    LL --> OO[get_buffer_status]
+    LL --> PP[mark_chunk_consumed]
+    LL --> QQ[cleanup_consumed_chunks]
     
-    E --> RR[monitor_system()]
+    E --> RR[monitor_system]
     RR --> SS[Check Buffer Status]
     RR --> TT[Check Process Health]
     TT --> UU{Process Dead?}
@@ -88,12 +88,6 @@ flowchart TD
     SS --> XX{Buffer Depleted?}
     XX -->|Yes| YY[Emergency Shutdown]
     XX -->|No| WW
-    
-    style A fill:#e1f5fe
-    style F fill:#f3e5f5
-    style U fill:#e8f5e8
-    style HH fill:#fff3e0
-    style Q fill:#ffebee
 ```
 
 ### File-Function Mapping
