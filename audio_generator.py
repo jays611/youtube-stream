@@ -86,16 +86,14 @@ if __name__ == "__main__":
                 output_path
             ]
             
-            result = subprocess.run(cmd, capture_output=True, text=True, cwd="/root/home_projects/audiocraft")
+            result = subprocess.run(cmd, text=True, cwd="/root/home_projects/audiocraft")
             
             if result.returncode == 0:
                 generation_time = time.time() - start_time
                 print(f"✓ Generation successful in {generation_time:.1f} seconds")
                 return True
             else:
-                print(f"✗ Generation failed:")
-                print(f"STDOUT: {result.stdout}")
-                print(f"STDERR: {result.stderr}")
+                print(f"✗ Generation failed with return code {result.returncode}")
                 return False
                 
         except Exception as e:

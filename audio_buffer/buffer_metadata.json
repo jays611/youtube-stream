@@ -1,5 +1,16 @@
 {
-  "chunks": [],
-  "next_chunk_id": 1,
+  "chunks": [
+    {
+      "id": 1,
+      "filename": "chunk_001_prompt_0_5s.wav",
+      "path": "/root/home_projects/youtube-stream/audio_buffer/chunk_001_prompt_0_5s.wav",
+      "prompt_index": 0,
+      "prompt": "smooth indian lofi hip hop with electric sitar, mellow drums, and ambient textures",
+      "duration": 5,
+      "created_at": 1753571832.9356074,
+      "consumed": false
+    }
+  ],
+  "next_chunk_id": 2,
   "current_prompt_index": 2
 }

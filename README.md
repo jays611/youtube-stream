@@ -21,94 +21,145 @@ A 24/7 YouTube live stream system that generates continuous Indian lofi music us
 
 ```mermaid
 flowchart TD
-    A[main.py] --> B[StreamOrchestrator.run]
-    B --> C[Start Generator Process]
-    B --> D[Start Feeder Process]
-    B --> E[Monitor System]
+    A[main.py Orchestrator] --> B[Audio Generator Process]
+    A --> C[Stream Feeder Process]
+    A --> D[System Monitor]
     
-    C --> F[audio_generator.py]
-    F --> G[AudioGenerator.init]
-    G --> H[Load BufferManager]
-    G --> I[Create AudioCraft Script]
+    B --> E[Check Buffer Health]
+    E --> F{Need More Audio?}
+    F -->|Yes| G[Select Next Prompt 0-9 rotation]
+    G --> H[Generate 1-min WAV with AudioCraft]
+    H --> I[Save to /audio_buffer/ directory]
+    I --> J[Update buffer_metadata.json]
+    J --> K[Take Break Based on Buffer Health]
+    K --> E
+    F -->|No| L[Wait/Sleep]
+    L --> E
     
-    F --> J[run_generation_loop]
-    J --> K[buffer_manager.get_buffer_status]
-    K --> L{Buffer Health?}
-    L -->|DEPLETED and Empty| M[Continue Generation]
-    L -->|DEPLETED and Has Chunks| N[Stop Generation]
-    L -->|HEALTHY/WARNING/CRITICAL| M
+    C --> M[Check Buffer for Next Chunk]
+    M --> N{Chunk Available?}
+    N -->|No| O[Wait 5 seconds]
+    O --> M
+    N -->|Yes| P{Prompt Changed?}
+    P -->|Yes| Q[Add 3-second Silence]
+    P -->|No| R[Stream Audio Chunk]
+    Q --> R
+    R --> S[Mark Chunk as Consumed]
+    S --> T[Send to YouTube Live via FFmpeg]
+    T --> M
     
-    M --> O[buffer_manager.get_next_prompt_index]
-    O --> P[generate_chunk]
-    P --> Q[Subprocess AudioCraft Generation]
-    Q --> R[audio_write Save WAV]
-    R --> S[buffer_manager.add_chunk]
-    S --> T[Take Break Based on Health]
-    T --> J
-    
-    D --> U[stream_feeder.py]
-    U --> V[StreamFeeder.init]
-    V --> W[Load BufferManager]
-    
-    U --> X[stream_to_stdout]
-    X --> Y[buffer_manager.get_next_chunk]
-    Y --> Z{Chunk Available?}
-    Z -->|No| AA[Wait 5 seconds]
+    D --> U[Monitor Buffer Health]
+    D --> V[Monitor Process Health]
+    U --> W{Buffer Depleted?}
+    W -->|Yes| X[Emergency Shutdown]
+    W -->|No| Y[Continue Monitoring]
+    V --> Z{Process Crashed?}
+    Z -->|Yes| AA[Restart Process]
+    Z -->|No| Y
     AA --> Y
-    Z -->|Yes| BB[should_add_break]
-    BB -->|Yes| CC[Add 3-second Silence]
-    BB -->|No| DD[Stream Chunk]
-    CC --> DD
-    DD --> EE[read_audio_chunk]
-    EE --> FF[Simulate Streaming]
-    FF --> GG[buffer_manager.mark_chunk_consumed]
-    GG --> X
+    Y --> U
     
-    H --> HH[buffer_manager.py]
-    HH --> II[BufferManager.init]
-    II --> JJ[load_metadata]
-    JJ --> KK[buffer_metadata.json]
-    
-    HH --> LL[Key Functions]
-    LL --> MM[add_chunk]
-    LL --> NN[get_next_chunk]
-    LL --> OO[get_buffer_status]
-    LL --> PP[mark_chunk_consumed]
-    LL --> QQ[cleanup_consumed_chunks]
-    
-    E --> RR[monitor_system]
-    RR --> SS[Check Buffer Status]
-    RR --> TT[Check Process Health]
-    TT --> UU{Process Dead?}
-    UU -->|Yes| VV[Restart Process]
-    UU -->|No| WW[Continue Monitoring]
-    VV --> WW
-    WW --> RR
-    
-    SS --> XX{Buffer Depleted?}
-    XX -->|Yes| YY[Emergency Shutdown]
-    XX -->|No| WW
+    style B fill:#f9f,stroke:#333,stroke-width:2px
+    style C fill:#9f9,stroke:#333,stroke-width:2px
+    style D fill:#99f,stroke:#333,stroke-width:2px
 ```
 
-### File-Function Mapping
+### Detailed Workflow Summary
 
-| File | Key Functions | Purpose |
-|------|---------------|----------|
-| **main.py** | `StreamOrchestrator.run()`, `monitor_system()` | Process coordination, health monitoring |
-| **audio_generator.py** | `generate_chunk()`, `run_generation_loop()` | AudioCraft chunk generation |
-| **stream_feeder.py** | `stream_to_stdout()`, `should_add_break()` | Chunk streaming with breaks |
-| **buffer_manager.py** | `add_chunk()`, `get_next_chunk()`, `get_buffer_status()` | Queue management, health tracking |
-| **config.py** | `PROMPTS[]`, buffer settings | Configuration and prompts |
-| **test_phase1.py** | `test_audio_generation()`, `test_buffer_manager()` | Testing utilities |
+## **Buffer System Architecture**
+- **Queue Type**: File system + JSON metadata (NOT RabbitMQ or message queue)
+- **Storage Location**: WAV files stored in `/audio_buffer/` directory
+- **Metadata Tracking**: `buffer_metadata.json` tracks available vs consumed chunks
+- **Cleanup Strategy**: Keeps last 10 consumed files, removes older ones automatically
+
+## **Prompt Management Strategy**
+- **Total Prompts**: 10 different Indian lofi styles
+- **Prompt Duration**: Each prompt plays for **1 hour** before switching
+- **Dynamic Calculation**: `CHUNKS_PER_PROMPT = (1 hour * 3600 seconds) / CHUNK_DURATION`
+  - 1-minute chunks = 60 chunks per prompt
+  - 5-minute chunks = 12 chunks per prompt  
+  - 10-minute chunks = 6 chunks per prompt
+- **Rotation**: Cycles through prompts 0→1→2→...→9→0 after each hour
+- **3-Second Breaks**: Only added when switching between different prompts (every hour)
+
+## **Process Triggering & Execution**
+
+### **main.py Orchestrator**
+- **Startup**: Immediately launches both generator and feeder processes
+- **Not Cron-Based**: Continuous running processes, not scheduled jobs
+- **Process Management**: Monitors and restarts crashed processes
+- **Health Monitoring**: Checks buffer status every minute
+
+### **Audio Generation Loop (Continuous)**
+```
+while True:
+    1. Check buffer health (HEALTHY/WARNING/CRITICAL/DEPLETED)
+    2. If buffer needs chunks → generate next chunk in current prompt sequence
+    3. Save WAV file to /audio_buffer/ directory
+    4. Update buffer_metadata.json with new chunk info
+    5. Take break based on buffer health:
+       - HEALTHY: 5-minute break
+       - WARNING: 2-minute break  
+       - CRITICAL/EMERGENCY: No break, continuous generation
+    6. Repeat loop
+```
+
+### **Stream Feeding Loop (Continuous)**
+```
+while True:
+    1. Check buffer for next unconsumed chunk
+    2. If no chunks available → wait 5 seconds, retry
+    3. If chunk available:
+       a. Check if prompt changed from previous chunk
+       b. If prompt changed → add 3-second silence
+       c. Stream audio chunk (currently simulated, Phase 2 = FFmpeg→YouTube)
+       d. Mark chunk as consumed in metadata
+    4. Repeat loop
+```
+
+## **Buffer Health States**
+- **HEALTHY**: >24 hours of audio remaining → 5-minute breaks between generation
+- **WARNING**: 12-24 hours remaining → 2-minute breaks
+- **CRITICAL**: 6-12 hours remaining → No breaks, continuous generation
+- **EMERGENCY**: 2-6 hours remaining → No breaks, continuous generation
+- **DEPLETED**: <2 hours remaining → Emergency shutdown of stream
+
+## **File System Organization**
+```
+/audio_buffer/
+├── chunk_001_prompt_0_60s.wav    # First chunk of prompt 0
+├── chunk_002_prompt_0_60s.wav    # Second chunk of prompt 0
+├── ...                           # (58 more chunks of prompt 0)
+├── chunk_060_prompt_0_60s.wav    # Last chunk of prompt 0 (1 hour complete)
+├── chunk_061_prompt_1_60s.wav    # First chunk of prompt 1 (3-sec break added here)
+├── chunk_062_prompt_1_60s.wav    # Second chunk of prompt 1
+└── buffer_metadata.json          # Tracks all chunk status
+```
+
+## **Key Configuration (config.py)**
+- **CHUNK_DURATION**: Duration of each audio chunk (60s, 300s, 600s, etc.)
+- **PROMPT_DURATION_HOURS**: How long each prompt plays (1 hour)
+- **CHUNKS_PER_PROMPT**: Dynamically calculated based on chunk duration
+- **TARGET_BUFFER_HOURS**: Target buffer size (24 hours)
+- **PROMPTS[]**: Array of 10 Indian lofi prompt variations
+
+## **Process Responsibilities**
+- **main.py**: Process orchestration, health monitoring, emergency shutdown
+- **audio_generator.py**: AudioCraft integration, WAV file creation, prompt sequencing
+- **stream_feeder.py**: Chunk streaming, break insertion, consumption tracking
+- **buffer_manager.py**: File queue management, metadata persistence, cleanup
+- **config.py**: All settings, prompts, and dynamic calculations
 
 ## Current Status: Phase 1 Complete ✅
 
 ### What's Been Built
-1. **Core Buffer System** - Chunk generation, storage, and queue management
-2. **10 Indian Lofi Prompts** - Rotating through different styles
-3. **Health Monitoring** - Buffer levels (HEALTHY → WARNING → CRITICAL → EMERGENCY)
-4. **Process Coordination** - Generator and feeder working together
-5. **Testing Framework** - Comprehensive testing tools
+1. **Core Buffer System** - File-based queue with JSON metadata tracking
+2. **10 Indian Lofi Prompts** - Each plays for 1 hour before rotation
+3. **Dynamic Prompt Management** - Calculates chunks per prompt based on duration
+4. **Health Monitoring** - 5 buffer states with adaptive generation breaks
+5. **Process Coordination** - Continuous loops for generation and streaming
+6. **Cleanup System** - Automatic removal of old consumed chunks
+7. **Testing Framework** - Comprehensive testing tools for all components
 
 ### Files Created
 ```

@@ -10,7 +10,7 @@ BUFFER_DIR = "/root/home_projects/youtube-stream/audio_buffer"
 AUDIOCRAFT_VENV = "/root/home_projects/audiocraft/my_venv/bin/python"
 
 # Audio Generation Settings
-CHUNK_DURATION = 600  # 10 minutes in seconds
+CHUNK_DURATION = 300   # 1 minute in seconds for testing
 MODEL_SIZE = "small"
 SAMPLE_RATE = 32000
 
@@ -19,6 +19,10 @@ TARGET_BUFFER_HOURS = 24
 WARNING_BUFFER_HOURS = 12
 CRITICAL_BUFFER_HOURS = 6
 EMERGENCY_BUFFER_HOURS = 2
+
+# Prompt Management  
+PROMPT_DURATION_HOURS = 1  # Each prompt plays for 1 hour
+CHUNKS_PER_PROMPT = int((PROMPT_DURATION_HOURS * 3600) / CHUNK_DURATION)  # Dynamic calculation
 
 # Generation Breaks (seconds)
 HEALTHY_BREAK = 300    # 5 minutes

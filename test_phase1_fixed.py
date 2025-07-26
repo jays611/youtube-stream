@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Phase 1 Testing Script
+Phase 1 Testing Script - Fixed Version
 Tests the core buffer system components
 """
 
@@ -21,7 +21,7 @@ def test_buffer_manager():
     print(f"Initial buffer status: {status}")
     
     # Test prompt rotation
-    print("\\nTesting prompt rotation:")
+    print("\nTesting prompt rotation:")
     for i in range(12):  # Test more than 10 to see rotation
         prompt_idx = bm.get_next_prompt_index()
         print(f"Prompt {i+1}: Index {prompt_idx} - {bm.metadata['current_prompt_index']}")
@@ -30,41 +30,73 @@ def test_buffer_manager():
 
 def test_audio_generation():
     """Test audio generation (single chunk)"""
-    print("\\n=== Testing Audio Generation ===")
-    print("This will generate one 10-minute chunk...")
-    print("This will take approximately 24 minutes...")
+    from config import CHUNK_DURATION
+    print("\n=== Testing Audio Generation ===")
+    print(f"This will generate one {CHUNK_DURATION//60}-minute chunk...")
+    print(f"This will take approximately {CHUNK_DURATION * 2.4 / 60:.1f} minutes...")
     
-    # Create a test script that generates just one chunk then exits
-    test_script = '''
-import sys
+    # Write test script to file
+    test_script_content = """import sys
+import time
 sys.path.append("/root/home_projects/youtube-stream")
 from audio_generator import AudioGenerator
+from config import PROMPTS, CHUNK_DURATION
+
+print("=== Audio Generation Test Started ===")
+print("Target duration: {} seconds ({:.1f} minutes)".format(CHUNK_DURATION, CHUNK_DURATION/60))
+print("Expected generation time: ~{:.0f} seconds ({:.1f} minutes)".format(CHUNK_DURATION * 2.4, CHUNK_DURATION * 2.4/60))
+print("Expected tokens: ~{} tokens (50 tokens/sec)".format(CHUNK_DURATION * 50))
 
 generator = AudioGenerator()
 status = generator.buffer_manager.get_buffer_status()
-print(f"Starting generation with {status['available_chunks']} chunks")
+print("Initial buffer status:")
+print("  Available chunks: {}".format(status['available_chunks']))
+print("  Buffer health: {}".format(status['health']))
+print("  Hours remaining: {:.1f}".format(status['hours_remaining']))
 
-# Generate exactly one chunk
+print("=== Starting Chunk Generation ===")
 prompt_index = generator.buffer_manager.get_next_prompt_index()
-from config import PROMPTS
 prompt = PROMPTS[prompt_index]
+print("Prompt index: {}".format(prompt_index))
+print("Prompt: {}".format(prompt))
+print("Generation started at: {}".format(time.strftime('%H:%M:%S')))
+
 temp_path = "/tmp/test_chunk.wav"
+start_time = time.time()
 
 if generator.generate_chunk(prompt, temp_path):
+    generation_time = time.time() - start_time
     chunk_info = generator.buffer_manager.add_chunk(temp_path, prompt_index)
-    print(f"✓ Successfully generated test chunk {chunk_info['id']}")
+    
+    print("=== Generation Complete ===")
+    print("✓ Successfully generated chunk {}".format(chunk_info['id']))
+    print("Generation time: {:.1f} seconds ({:.1f} minutes)".format(generation_time, generation_time/60))
+    print("Generation speed: {:.3f}x realtime".format(CHUNK_DURATION/generation_time))
+    print("Output file: {}".format(chunk_info['path']))
+    
+    final_status = generator.buffer_manager.get_buffer_status()
+    print("Final buffer status:")
+    print("  Available chunks: {}".format(final_status['available_chunks']))
+    print("  Buffer health: {}".format(final_status['health']))
+    print("  Hours remaining: {:.1f}".format(final_status['hours_remaining']))
+    
+    import os
+    if os.path.exists(chunk_info['path']):
+        file_size = os.path.getsize(chunk_info['path']) / (1024*1024)
+        print("  File size: {:.1f} MB".format(file_size))
 else:
     print("✗ Failed to generate test chunk")
-'''
+    print("Check the error messages above for details")
+"""
     
     try:
         with open('/tmp/test_generation.py', 'w') as f:
-            f.write(test_script)
+            f.write(test_script_content)
         
         # Run the test script
         result = subprocess.run([
             sys.executable, "/tmp/test_generation.py"
-        ], cwd="/root/home_projects/youtube-stream", timeout=1800)  # 30 min timeout
+        ], cwd="/root/home_projects/youtube-stream", timeout=60000)  # 10 min timeout to be safe
         
         if result.returncode == 0:
             print("✓ Audio generation test completed")
@@ -82,7 +114,7 @@ else:
 
 def test_stream_feeder():
     """Test stream feeder"""
-    print("\\n=== Testing Stream Feeder ===")
+    print("\n=== Testing Stream Feeder ===")
     
     # Check if we have any chunks to stream
     bm = BufferManager()
@@ -113,7 +145,7 @@ def test_stream_feeder():
 
 def show_buffer_contents():
     """Show current buffer contents"""
-    print("\\n=== Buffer Contents ===")
+    print("\n=== Buffer Contents ===")
     
     bm = BufferManager()
     
@@ -122,7 +154,7 @@ def show_buffer_contents():
         return
     
     print(f"Total chunks: {len(bm.metadata['chunks'])}")
-    print("\\nChunk details:")
+    print("\nChunk details:")
     
     for chunk in bm.metadata['chunks']:
         status = "✓" if os.path.exists(chunk['path']) else "✗"
@@ -134,7 +166,7 @@ def show_buffer_contents():
 
 def cleanup_test_data():
     """Clean up test data"""
-    print("\\n=== Cleanup Test Data ===")
+    print("\n=== Cleanup Test Data ===")
     
     import shutil
     buffer_dir = "/root/home_projects/youtube-stream/audio_buffer"
@@ -148,7 +180,7 @@ def cleanup_test_data():
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python test_phase1.py <test>")
+        print("Usage: python test_phase1_fixed.py <test>")
         print("Tests:")
         print("  buffer     - Test buffer manager")
         print("  generate   - Test audio generation (one chunk)")
