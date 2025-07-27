@@ -28,31 +28,57 @@ import time
 from audiocraft.models import MusicGen
 from audiocraft.data.audio import audio_write
 
+# Global model instance (load once, reuse for all chunks)
+model = None
+
+def load_model():
+    global model
+    if model is None:
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        torch.set_default_device(device)
+        
+        print(f"Loading model on {{device}}...")
+        model = MusicGen.get_pretrained("facebook/musicgen-{MODEL_SIZE}")
+        
+        # GPU optimization: use FP16 if available
+        if device == 'cuda':
+            model = model.to(dtype=torch.float16, device=device)
+            print(f"Model optimized for GPU with FP16")
+        
+        model.set_generation_params(
+            use_sampling=True,
+            top_k=250,
+            top_p=0.0,
+            temperature=1.0,
+            duration=60,  # Will be overridden per call
+            cfg_coef=3.0
+        )
+        print(f"Model loaded and ready on {{device}}")
+    return model
+
 def generate_chunk(prompt, duration, output_path):
-    # Load model
-    model = MusicGen.get_pretrained("facebook/musicgen-{MODEL_SIZE}")
-    model.set_generation_params(
-        use_sampling=True,
-        top_k=250,
-        top_p=0.0,
-        temperature=1.0,
-        duration=duration,
-        cfg_coef=3.0
-    )
+    model = load_model()
     
-    # Generate audio
-    print(f"Generating {{duration}}s audio...")
+    # Update duration for this generation
+    model.set_generation_params(duration=duration)
+    
+    print(f"Generating {{duration}}s audio: {{prompt[:50]}}...")
     start_time = time.time()
     
+    # Use AudioCraft's built-in progress display
     with torch.no_grad():
         wav = model.generate([prompt], progress=True)
     
     generation_time = time.time() - start_time
-    print(f"Generation completed in {{generation_time:.1f}} seconds")
+    print(f"\\nGeneration completed in {{generation_time:.1f}}s ({{duration/generation_time:.2f}}x realtime)")
     
-    # Save audio
-    audio_write(output_path.replace('.wav', ''), wav[0].cpu(), model.sample_rate, strategy="loudness")
-    print(f"Saved: {{output_path}}")
+    audio_write(
+        output_path.replace('.wav', ''), 
+        wav[0].cpu(), 
+        model.sample_rate, 
+        strategy="loudness", 
+        loudness_compressor=True
+    )
     
     return output_path
 
@@ -101,50 +127,59 @@ if __name__ == "__main__":
             return False
     
     def run_generation_loop(self):
-        """Main generation loop"""
-        print("Starting Audio Generation Loop...")
+        """Main generation loop - continuous with cooldowns"""
+        print("Starting Continuous Audio Generation Loop...")
+        print("Rolling buffer: always generates, deletes oldest when full")
+        
+        generation_count = 0
+        loop_start_time = time.time()
         
         while True:
             try:
                 # Check buffer status
                 status = self.buffer_manager.get_buffer_status()
-                print(f"\\n=== Buffer Status ===")
-                print(f"Health: {status['health']}")
-                print(f"Available chunks: {status['available_chunks']}")
-                print(f"Hours remaining: {status['hours_remaining']:.1f}")
+                generation_count += 1
                 
-                # Only quit if we have chunks but they're depleted
-                # Allow initial generation when starting from empty
-                if status['health'] == 'DEPLETED' and status['available_chunks'] > 0:
+                print(f"\n=== Generation #{generation_count} ===")
+                print(f"Buffer: {status['total_files']}/{MAX_BUFFER_FILES} files | Health: {status['health']}")
+                print(f"Available: {status['available_chunks']} chunks ({status['hours_remaining']:.1f}h remaining)")
+                
+                # Emergency stop only if truly depleted
+                if status['health'] == 'DEPLETED':
                     print("BUFFER DEPLETED - STOPPING GENERATION")
                     break
                 
-                # Get next prompt
+                # Get next prompt (handles rotation automatically)
                 prompt_index = self.buffer_manager.get_next_prompt_index()
                 prompt = PROMPTS[prompt_index]
+                
+                print(f"Prompt {prompt_index}: {prompt[:60]}...")
                 
                 # Generate chunk
                 temp_path = f"/tmp/chunk_temp_{int(time.time())}.wav"
                 
                 if self.generate_chunk(prompt, temp_path):
-                    # Add to buffer
+                    # Add to buffer (handles rolling deletion automatically)
                     chunk_info = self.buffer_manager.add_chunk(temp_path, prompt_index)
-                    print(f"✓ Added chunk {chunk_info['id']} to buffer")
                     
-                    # Cleanup old chunks
-                    self.buffer_manager.cleanup_consumed_chunks()
+                    # Calculate running stats
+                    elapsed = time.time() - loop_start_time
+                    avg_time = elapsed / generation_count
+                    
+                    print(f"✓ Added chunk {chunk_info['id']} to rolling buffer")
+                    print(f"Stats: {generation_count} chunks in {elapsed/3600:.1f}h (avg: {avg_time/60:.1f} min/chunk)")
                 else:
                     print("✗ Failed to generate chunk, retrying...")
                     continue
                 
-                # Take break based on buffer health
-                break_time = status['recommended_break']
-                if break_time > 0:
-                    print(f"Taking {break_time}s break...")
-                    time.sleep(break_time)
+                # Cooldown based on buffer health
+                cooldown = status['cooldown_seconds']
+                if cooldown > 0:
+                    print(f"Cooldown: {cooldown}s ({status['health']} state)")
+                    time.sleep(cooldown)
                 
             except KeyboardInterrupt:
-                print("\\nGeneration stopped by user")
+                print("\nGeneration stopped by user")
                 break
             except Exception as e:
                 print(f"Generation loop error: {e}")
