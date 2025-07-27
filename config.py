@@ -6,8 +6,8 @@ Configuration for Indian Lofi YouTube Stream
 import os
 
 # Paths
-BUFFER_DIR = "/root/home_projects/youtube-stream/audio_buffer"
-AUDIOCRAFT_VENV = "/root/home_projects/audiocraft/my_venv/bin/python"
+BUFFER_DIR = "/home/ec2-user/projects/youtube-stream/audio_buffer"
+AUDIOCRAFT_VENV = "/usr/bin/python3"
 
 # Audio Generation Settings
 CHUNK_DURATION = 60   # 1 minute in seconds for testing
@@ -15,7 +15,7 @@ MODEL_SIZE = "small"
 SAMPLE_RATE = 32000
 
 # Fixed Buffer Management (1 week of audio)
-MAX_BUFFER_FILES = 1440  # 1 week × 24h × 60min = 1,440 files
+MAX_BUFFER_FILES = 10080  # 1 week × 24h × 60min = 10,080 files
 TARGET_BUFFER_HOURS = 24
 WARNING_BUFFER_HOURS = 12
 CRITICAL_BUFFER_HOURS = 6
@@ -35,16 +35,16 @@ CHUNKS_PER_PROMPT = 60     # 60 chunks = 1 hour per prompt
 
 # Indian Lofi Prompts (10 prompts rotating)
 PROMPTS = [
-    "smooth indian lofi hip hop with electric sitar, mellow drums, and ambient textures",
-    "meditative indian lofi beats with tanpura drone, soft tabla, and nature sounds",
-    "peaceful indian lofi hip hop with sitar, tabla beats, and ambient rain sounds",
-    "serene south indian tamil lofi with veena melody, mridangam rhythms, and temple bells ambience",
-    "relaxing indian lofi music with sitar melody, gentle percussion, and atmospheric pads",
-    "chill indian classical fusion lofi with harmonium, soft tabla, and vinyl crackle",
-    "dreamy indian lofi with flute melody, tabla beats, and monsoon rain ambience",
+    "gentle indian lofi hip hop with smooth sarod, subdued drums, and warm room tone",
+    "low-key indian lofi hip hop with muted sitar, soft percussion, and subtle breeze textures",
+    "quiet indian lofi hip hop with distant sarangi, hushed drums, and misty ambience",
+    "downtempo indian lofi hip hop with delicate santoor, minimal beats, and calm water sounds",
+    "tranquil indian lofi hip hop with soft esraj melody, gentle rhythm, and evening atmosphere",
+    "understated indian lofi hip hop with ambient veena, whispered percussion, and twilight textures",
+    "chill indian classical fusion lofi hip hop with harmonium, soft tabla, and vinyl crackle",
+    "dreamy indian lofi hip hop with flute melody, tabla beats, and monsoon rain ambience",
+    "smooth indian lofi hip hop with electric sitar, mellow drums, and ambient texture",
     "nostalgic indian lofi hip hop with santoor, gentle drums, and street sounds",
-    "tranquil indian lofi with bansuri flute, tanpura drone, and forest sounds",
-    "mellow indian lofi beats with sarod melody, soft percussion, and evening ambience"
 ]
 
 # Performance Metrics (measured)

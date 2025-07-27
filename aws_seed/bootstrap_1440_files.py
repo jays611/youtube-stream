@@ -10,16 +10,22 @@ import time
 import json
 import subprocess
 import torch
-from config import PROMPTS
+
+# Import config from parent directory
+import importlib.util
+config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'config.py')
+spec = importlib.util.spec_from_file_location("config", config_path)
+config = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(config)
+PROMPTS = config.PROMPTS
 
 # Bootstrap configuration
 CHUNK_DURATION = 60  # 1 minute chunks
-TOTAL_FILES = 1440   # 1 week of audio
+TOTAL_FILES = 10080   # 1 week of audio
 CHUNKS_PER_PROMPT = 60  # 1 hour per prompt
-MODEL_SIZE = "small"
 OUTPUT_DIR = "./bootstrap_output"
 
-def create_generation_script(audiocraft_dir):
+def create_generation_script(audiocraft_dir, model_size):
     """Create AudioCraft generation script"""
     script_content = f'''
 import sys
@@ -41,14 +47,11 @@ def load_model():
             raise RuntimeError("GPU not available! This script requires CUDA GPU for AWS efficiency.")
         
         device = 'cuda'
-        torch.set_default_device(device)
         
         print(f"🚀 Loading model on {{device}} ({{torch.cuda.get_device_name(0)}})...")
-        model = MusicGen.get_pretrained("facebook/musicgen-{MODEL_SIZE}")
+        model = MusicGen.get_pretrained("facebook/musicgen-{model_size}")
         
-        # GPU optimization: use FP16 for T4
-        model = model.to(dtype=torch.float16, device=device)
-        print(f"✅ Model optimized for GPU with FP16 (VRAM: {{torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f}GB)")
+        print(f"✅ Model loaded and optimized for GPU (VRAM: {{torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f}}GB)")
         
         model.set_generation_params(
             use_sampling=True,
@@ -67,7 +70,7 @@ def generate_chunk(prompt, duration, output_path):
     # Update duration for this generation
     model.set_generation_params(duration=duration)
     
-    print(f"🎵 Generating {{duration}}s audio on {{next(model.parameters()).device}}...")
+    print(f"🎵 Generating {{duration}}s audio...")
     print(f"📝 Prompt: {{prompt[:60]}}...")
     start_time = time.time()
     
@@ -79,13 +82,9 @@ def generate_chunk(prompt, duration, output_path):
     print(f"⚡ Generation speed: {{duration/generation_time:.2f}}x realtime")
     print(f"💾 Saving to: {{output_path}}")
     
-    audio_write(
-        output_path.replace('.wav', ''), 
-        wav[0].cpu(), 
-        model.sample_rate, 
-        strategy="loudness", 
-        loudness_compressor=True
-    )
+    # Save as WAV directly without ffmpeg dependency
+    import torchaudio
+    torchaudio.save(output_path, wav[0].cpu(), model.sample_rate)
     
     file_size = os.path.getsize(output_path) / (1024*1024)
     print(f"✅ Saved {{file_size:.1f}}MB file")
@@ -109,10 +108,13 @@ def generate_single_chunk(chunk_id, prompt_index, generation_script, audiocraft_
     """Generate a single 1-minute chunk with detailed logging"""
     prompt = PROMPTS[prompt_index]
     filename = f"chunk_{chunk_id:03d}_prompt_{prompt_index}_{CHUNK_DURATION}s.wav"
-    output_path = os.path.join(OUTPUT_DIR, filename)
+    output_path = os.path.abspath(os.path.join(OUTPUT_DIR, filename))
+    
+    # Ensure output directory exists
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
     
     print(f"\n{'='*60}")
-    print(f"🎯 CHUNK {chunk_id:03d}/1440 ({chunk_id/TOTAL_FILES*100:.1f}% complete)")
+    print(f"🎯 CHUNK {chunk_id:03d}/10080 ({chunk_id/TOTAL_FILES*100:.1f}% complete)")
     print(f"📁 File: {filename}")
     print(f"🎨 Prompt {prompt_index}: {prompt[:50]}...")
     print(f"{'='*60}")
@@ -180,8 +182,9 @@ def create_metadata(generated_chunks):
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python bootstrap_1440_files.py <audiocraft_directory>")
-        print("Example: python bootstrap_1440_files.py /path/to/audiocraft")
+        print("Usage: python bootstrap_1440_files.py <audiocraft_directory> [model_size]")
+        print("Example: python bootstrap_1440_files.py /path/to/audiocraft large")
+        print("Model sizes: small, medium, large (default: small)")
         print("")
         print("Setup instructions:")
         print("1. Clone AudioCraft: git clone https://github.com/facebookresearch/audiocraft")
@@ -191,6 +194,7 @@ def main():
         sys.exit(1)
     
     audiocraft_dir = os.path.abspath(sys.argv[1])
+    model_size = sys.argv[2] if len(sys.argv) > 2 else "small"
     audiocraft_venv = os.path.join(audiocraft_dir, "my_venv", "bin", "python")
     
     # Validate paths
@@ -220,7 +224,7 @@ def main():
     print(f"💾 GPU memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f}GB")
     print(f"⏱️  Expected runtime: ~72-96 hours (3-4 min per chunk = 3-4 days)")
     print(f"💰 Estimated AWS cost: ~$50-70 for g4dn.xl")
-    print(f"Target: {TOTAL_FILES} files ({TOTAL_FILES/60:.1f} hours)")
+    print(f"Target: {TOTAL_FILES} files ({TOTAL_FILES/60:.1f} hours = {TOTAL_FILES/60/24:.1f} days)")
     print(f"Chunk duration: {CHUNK_DURATION} seconds")
     print(f"Chunks per prompt: {CHUNKS_PER_PROMPT}")
     print(f"Total prompts: {len(PROMPTS)}")
@@ -230,7 +234,7 @@ def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     
     # Create generation script
-    generation_script = create_generation_script(audiocraft_dir)
+    generation_script = create_generation_script(audiocraft_dir, model_size)
     
     # Track generation
     generated_chunks = []

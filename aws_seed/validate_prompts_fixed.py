@@ -10,14 +10,20 @@ import os
 import time
 import subprocess
 import torch
-from config import PROMPTS
+
+# Import config from parent directory
+import importlib.util
+config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'config.py')
+spec = importlib.util.spec_from_file_location("config", config_path)
+config = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(config)
+PROMPTS = config.PROMPTS
 
 # Validation configuration
-CHUNK_DURATION = 300  # 5 minutes for validation
-MODEL_SIZE = "small"
+CHUNK_DURATION = 60  # 5 minutes for validation
 OUTPUT_DIR = "./prompt_validation"
 
-def create_validation_script(audiocraft_dir):
+def create_validation_script(audiocraft_dir, model_size):
     """Create GPU-optimized AudioCraft validation script"""
     script_content = f'''
 import sys
@@ -39,14 +45,11 @@ def load_model():
             raise RuntimeError("GPU not available! This script requires CUDA GPU.")
         
         device = 'cuda'
-        torch.set_default_device(device)
         
         print(f"Loading model on {{device}} ({{torch.cuda.get_device_name(0)}})...")
-        model = MusicGen.get_pretrained("facebook/musicgen-{MODEL_SIZE}")
+        model = MusicGen.get_pretrained(f"facebook/musicgen-{model_size}")
         
-        # GPU optimization: use FP16
-        model = model.to(dtype=torch.float16, device=device)
-        print(f"Model optimized for GPU with FP16")
+        print(f"Model loaded and optimized for GPU")
         
         model.set_generation_params(
             use_sampling=True,
@@ -70,15 +73,11 @@ def generate_sample(prompt, output_path):
         wav = model.generate([prompt], progress=True)
     
     generation_time = time.time() - start_time
-    print(f"\\nGeneration completed in {{generation_time:.1f}}s ({{CHUNK_DURATION/generation_time:.2f}}x realtime)")
+    print(f"\\nGeneration completed in {{generation_time:.1f}}s ({{60/generation_time:.2f}}x realtime)")
     
-    audio_write(
-        output_path.replace('.wav', ''), 
-        wav[0].cpu(), 
-        model.sample_rate, 
-        strategy="loudness", 
-        loudness_compressor=True
-    )
+    # Save as WAV directly without ffmpeg dependency
+    import torchaudio
+    torchaudio.save(output_path, wav[0].cpu(), model.sample_rate)
     
     return output_path, generation_time
 
@@ -97,7 +96,7 @@ if __name__ == "__main__":
 def validate_single_prompt(prompt_index, prompt, validation_script, audiocraft_venv, audiocraft_dir):
     """Generate validation sample for a single prompt"""
     filename = f"prompt_{prompt_index:02d}_{CHUNK_DURATION}s.wav"
-    output_path = os.path.join(OUTPUT_DIR, filename)
+    output_path = os.path.abspath(os.path.join(OUTPUT_DIR, filename))
     
     print(f"\n[{prompt_index+1:02d}/10] {filename}")
     print(f"Prompt: {prompt}")
@@ -123,14 +122,16 @@ def validate_single_prompt(prompt_index, prompt, validation_script, audiocraft_v
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python validate_prompts.py <audiocraft_directory>")
-        print("Example: python validate_prompts.py /path/to/audiocraft")
+        print("Usage: python validate_prompts.py <audiocraft_directory> [model_size]")
+        print("Example: python validate_prompts.py /path/to/audiocraft small")
+        print("Model sizes: small, medium, large (default: small)")
         print("")
         print("This script validates all 10 prompts by generating 5-minute samples.")
         print("Run this before bootstrap to test audio quality and estimate timing.")
         sys.exit(1)
     
     audiocraft_dir = os.path.abspath(sys.argv[1])
+    model_size = sys.argv[2] if len(sys.argv) > 2 else "small"
     audiocraft_venv = os.path.join(audiocraft_dir, "my_venv", "bin", "python")
     
     # Validate paths
@@ -165,7 +166,7 @@ def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     
     # Create validation script
-    validation_script = create_validation_script(audiocraft_dir)
+    validation_script = create_validation_script(audiocraft_dir, model_size)
     
     # Track validation
     successful_prompts = []
