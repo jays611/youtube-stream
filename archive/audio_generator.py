@@ -94,12 +94,13 @@ if __name__ == "__main__":
             f.write(script_content)
         return script_path
     
-    def generate_chunk(self, prompt: str, output_path: str) -> bool:
+    def generate_chunk(self, prompt: str, output_path: str, duration: int = None) -> bool:
         """Generate single audio chunk"""
         try:
+            chunk_duration = duration or CHUNK_DURATION
             print(f"\\nGenerating chunk: {os.path.basename(output_path)}")
             print(f"Prompt: {prompt}")
-            print(f"Duration: {CHUNK_DURATION} seconds")
+            print(f"Duration: {chunk_duration} seconds")
             
             start_time = time.time()
             
@@ -108,7 +109,7 @@ if __name__ == "__main__":
                 AUDIOCRAFT_VENV,
                 self.generation_script,
                 prompt,
-                str(CHUNK_DURATION),
+                str(chunk_duration),
                 output_path
             ]
             

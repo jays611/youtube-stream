@@ -1,156 +1,150 @@
 #!/usr/bin/env python3
 """
-Main orchestrator for Indian Lofi YouTube Stream
-Phase 1: Core buffer system testing
+New Main Orchestrator for Pre-built Content Architecture
+Manages content library, scheduled generation, and stream stitching
 """
 
-import os
 import sys
-import time
-import subprocess
-import signal
-from buffer_manager import BufferManager
-from config import *
+import os
+from content_library import ContentLibrary
+from stream_stitcher import StreamStitcher
+from scheduled_generator import ScheduledGenerator
 
-class StreamOrchestrator:
+class NewStreamOrchestrator:
     def __init__(self):
-        self.buffer_manager = BufferManager()
-        self.generator_process = None
-        self.feeder_process = None
-        self.running = False
+        self.library = ContentLibrary()
+        self.stitcher = StreamStitcher()
+        self.generator = ScheduledGenerator()
     
-    def signal_handler(self, signum, frame):
-        """Handle shutdown signals"""
-        print(f"\\nReceived signal {signum}, shutting down...")
-        self.shutdown()
-        sys.exit(0)
-    
-    def start_generator(self):
-        """Start audio generator process"""
-        print("Starting audio generator...")
-        self.generator_process = subprocess.Popen([
-            sys.executable, "audio_generator.py"
-        ], cwd="/root/home_projects/youtube-stream")
-        return self.generator_process
-    
-    def start_feeder(self):
-        """Start stream feeder process"""
-        print("Starting stream feeder...")
-        self.feeder_process = subprocess.Popen([
-            sys.executable, "stream_feeder.py"
-        ], cwd="/root/home_projects/youtube-stream")
-        return self.feeder_process
-    
-    def monitor_system(self):
-        """Monitor system health and processes"""
-        while self.running:
-            try:
-                # Check buffer status
-                status = self.buffer_manager.get_buffer_status()
-                
-                print(f"\\n=== System Status ===")
-                print(f"Buffer Health: {status['health']}")
-                print(f"Chunks Available: {status['available_chunks']}")
-                print(f"Hours Remaining: {status['hours_remaining']:.1f}")
-                
-                # Check if we should emergency shutdown
-                if status['health'] == 'DEPLETED':
-                    print("EMERGENCY: Buffer depleted, shutting down...")
-                    self.shutdown()
-                    break
-                
-                # Check process health
-                if self.generator_process and self.generator_process.poll() is not None:
-                    print("WARNING: Generator process died, restarting...")
-                    self.start_generator()
-                
-                if self.feeder_process and self.feeder_process.poll() is not None:
-                    print("WARNING: Feeder process died, restarting...")
-                    self.start_feeder()
-                
-                time.sleep(60)  # Check every minute
-                
-            except KeyboardInterrupt:
-                break
-            except Exception as e:
-                print(f"Monitor error: {e}")
-                time.sleep(30)
-    
-    def shutdown(self):
-        """Shutdown all processes"""
-        print("Shutting down stream system...")
-        self.running = False
+    def setup_library(self):
+        """Initial setup: scan existing content"""
+        print("=== Setting up Content Library ===")
         
-        if self.generator_process:
-            self.generator_process.terminate()
-            self.generator_process.wait()
-            print("Generator process stopped")
+        # Scan base content
+        chunks = self.library.scan_base_content()
+        stats = self.library.get_library_stats()
         
-        if self.feeder_process:
-            self.feeder_process.terminate()
-            self.feeder_process.wait()
-            print("Feeder process stopped")
+        print(f"Library Status:")
+        print(f"  Total chunks: {stats['total_chunks']}")
+        print(f"  Total hours: {stats['total_hours']:.1f}")
+        print(f"  Total days: {stats['total_days']:.1f}")
+        print(f"  Storage: {stats['storage_gb']:.1f} GB")
+        
+        return stats
     
-    def run(self, mode="full"):
-        """Run the stream system"""
-        # Setup signal handlers
-        signal.signal(signal.SIGINT, self.signal_handler)
-        signal.signal(signal.SIGTERM, self.signal_handler)
+    def create_streams(self):
+        """Create stitched streams for broadcasting"""
+        print("=== Creating Stitched Streams ===")
         
-        print("=== Indian Lofi Stream System ===")
-        print(f"Mode: {mode}")
+        stats = self.library.get_library_stats()
+        if stats['total_hours'] < 24:
+            print(f"⚠️  Only {stats['total_hours']:.1f} hours available, need at least 24h for streaming")
+            return False
         
-        if mode == "generator-only":
-            print("Running generator only...")
-            self.start_generator()
-            self.generator_process.wait()
-            
-        elif mode == "feeder-only":
-            print("Running feeder only...")
-            self.start_feeder()
-            self.feeder_process.wait()
-            
-        elif mode == "full":
-            print("Running full system...")
-            self.running = True
-            
-            # Start both processes
-            self.start_generator()
-            time.sleep(5)  # Let generator start first
-            self.start_feeder()
-            
-            # Monitor system
-            self.monitor_system()
+        # Create weekly batch of streams
+        segments = self.stitcher.create_weekly_batch()
+        print(f"✅ Created {len(segments)} stream segments")
         
+        return segments
+    
+    def create_youtube_content(self):
+        """Create 4-hour content for YouTube upload"""
+        print("=== Creating YouTube Content ===")
+        
+        stats = self.library.get_library_stats()
+        if stats['total_hours'] < 4:
+            print(f"⚠️  Only {stats['total_hours']:.1f} hours available, need at least 4h")
+            return None
+        
+        youtube_file = self.stitcher.create_youtube_content(4)
+        if youtube_file:
+            print(f"✅ YouTube content created: {youtube_file}")
+        
+        return youtube_file
+    
+    def generate_weekly_content(self):
+        """Generate weekly content (2 hours)"""
+        print("=== Generating Weekly Content ===")
+        
+        # Check current progress
+        progress = self.generator.get_weekly_progress()
+        print(f"Current week progress: {progress['progress_percent']:.1f}%")
+        
+        if progress['remaining_chunks'] > 0:
+            success = self.generator.generate_weekly_batch()
+            if success:
+                print("✅ Weekly generation complete")
+                return True
+            else:
+                print("✗ Weekly generation failed")
+                return False
         else:
-            print(f"Unknown mode: {mode}")
-            sys.exit(1)
+            print("✅ Weekly target already met")
+            return True
+    
+    def show_status(self):
+        """Show comprehensive system status"""
+        print("=== System Status ===")
+        
+        # Library stats
+        stats = self.library.get_library_stats()
+        print(f"\nContent Library:")
+        print(f"  Total content: {stats['total_hours']:.1f} hours ({stats['total_days']:.1f} days)")
+        print(f"  Base content: {stats['base_chunks']} chunks")
+        print(f"  Weekly additions: {stats['weekly_chunks']} chunks ({stats['weeks_added']} weeks)")
+        print(f"  Storage used: {stats['storage_gb']:.1f} GB")
+        
+        # Weekly progress
+        progress = self.generator.get_weekly_progress()
+        print(f"\nWeekly Generation:")
+        print(f"  Week: {progress['week_id']}")
+        print(f"  Progress: {progress['completed_chunks']}/{progress['target_chunks']} chunks ({progress['progress_percent']:.1f}%)")
+        print(f"  Sessions remaining: {progress['sessions_remaining']}")
+        
+        # Streaming readiness
+        streaming_ready = stats['total_hours'] >= 24
+        youtube_ready = stats['total_hours'] >= 4
+        
+        print(f"\nReadiness:")
+        print(f"  24/7 Streaming: {'✅ Ready' if streaming_ready else '❌ Need more content'}")
+        print(f"  YouTube Content: {'✅ Ready' if youtube_ready else '❌ Need more content'}")
 
 def show_usage():
-    print("Usage: python main.py [mode]")
-    print("Modes:")
-    print("  full          - Run both generator and feeder (default)")
-    print("  generator-only - Run only audio generator")
-    print("  feeder-only   - Run only stream feeder")
-    print("  status        - Show buffer status")
+    print("Usage: python main_new.py [command]")
+    print("Commands:")
+    print("  setup          - Initial library setup")
+    print("  status         - Show system status")
+    print("  generate       - Generate weekly content")
+    print("  streams        - Create stitched streams")
+    print("  youtube        - Create YouTube content")
+    print("  full-setup     - Complete setup process")
+
+def main():
+    if len(sys.argv) < 2:
+        show_usage()
+        sys.exit(1)
+    
+    command = sys.argv[1]
+    orchestrator = NewStreamOrchestrator()
+    
+    if command == "setup":
+        orchestrator.setup_library()
+    elif command == "status":
+        orchestrator.show_status()
+    elif command == "generate":
+        orchestrator.generate_weekly_content()
+    elif command == "streams":
+        orchestrator.create_streams()
+    elif command == "youtube":
+        orchestrator.create_youtube_content()
+    elif command == "full-setup":
+        print("=== Full System Setup ===")
+        orchestrator.setup_library()
+        orchestrator.create_streams()
+        orchestrator.show_status()
+    else:
+        print(f"Unknown command: {command}")
+        show_usage()
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        mode = sys.argv[1]
-        
-        if mode == "status":
-            bm = BufferManager()
-            status = bm.get_buffer_status()
-            print("=== Buffer Status ===")
-            for key, value in status.items():
-                print(f"{key}: {value}")
-            sys.exit(0)
-        elif mode in ["full", "generator-only", "feeder-only"]:
-            orchestrator = StreamOrchestrator()
-            orchestrator.run(mode)
-        else:
-            show_usage()
-            sys.exit(1)
-    else:
-        orchestrator = StreamOrchestrator()
-        orchestrator.run("full")
+    main()

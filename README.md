@@ -1,377 +1,368 @@
-# Indian Lofi YouTube Live Stream System (Rolling Buffer)
+# Indian Lofi YouTube Live Stream System (Pre-built Content Library)
 
 ## Overview
-A 24/7 YouTube live stream system that generates continuous Indian lofi music using Meta's AudioCraft. The system maintains a **fixed rolling buffer of exactly 1,440 one-minute audio files** (1 week of content), continuously generating new content while automatically deleting the oldest files.
+A 24/7 YouTube live stream system using pre-built Indian lofi music content. The system maintains a **content library of 30-second audio chunks** with sustainable weekly generation and automated stream stitching.
 
 ## System Architecture
 
 ```
-[Bootstrap Generator] → [1,440 Files] → [Rolling Buffer] → [Stream Feeder] → [YouTube Live]
-     (External Server)      (1 Week)       (Main System)
+[Base Content Library] → [Weekly Additions] → [Stream Stitcher] → [YouTube Live]
+    (1 Month = 86,400 files)    (240 files/week)     (Continuous Streams)
 ```
 
-### Key Innovation: Rolling Buffer System
-- **Fixed Size**: Always exactly 1,440 files (168 hours)
-- **Continuous Refresh**: ~2 hours replaced daily at current generation speed
-- **No Storage Growth**: Oldest files deleted when new ones are added
-- **Instant Startup**: Pre-seeded with 1 week of content
+### Key Innovation: Content Library System
+- **Base Library**: 86,400 × 30-second chunks (1 month of content)
+- **Weekly Generation**: 240 chunks/week (2 hours of new content)
+- **Stream Stitching**: Pre-built continuous streams from chunk library
+- **YouTube Content**: 4-hour segments created weekly for manual upload
+
+## Content Mathematics
+
+```
+30-second chunks for 1 month:
+- 1 month = 30 days × 24 hours × 60 minutes × 2 chunks = 86,400 files
+- Storage: 86,400 × 1.9MB = ~164GB base content
+- Weekly additions: 240 × 1.9MB = ~456MB per week
+- Total growth: ~24GB per year
+```
 
 ## Detailed Workflow Diagram
 
 ```mermaid
 flowchart TD
-    A[Bootstrap Script External Server] --> B[Generate 1,440 Files]
-    B --> C[Transfer to Main System]
-    C --> D[audio_buffer/ Directory]
+    A[Base Content Library] --> B[86,400 × 30s chunks]
+    B --> C[Content Library Manager]
     
-    D --> E[main.py Orchestrator]
-    E --> F[Audio Generator Process]
-    E --> G[Stream Feeder Process]
-    E --> H[System Monitor]
+    D[Scheduled Generator] --> E[Weekly Batch: 240 chunks]
+    E --> F[10 Sessions × 24 chunks]
+    F --> G[Add to Library]
+    G --> C
     
-    F --> I[Check Buffer Status]
-    I --> J[Get Next Prompt Index]
-    J --> K[Generate 1-min Chunk]
-    K --> L{Buffer Full?}
-    L -->|Yes| M[Delete Oldest File]
-    L -->|No| N[Add New File]
-    M --> N
-    N --> O[Update Metadata]
-    O --> P[Cooldown Based on Health]
-    P --> I
+    C --> H[Stream Stitcher]
+    H --> I[Create Stream Segments]
+    I --> J[6h + 8h + 6h + 4h segments]
+    J --> K[24/7 Live Stream]
     
-    G --> Q[Get Next Unconsumed Chunk]
-    Q --> R{Chunk Available?}
-    R -->|No| S[Wait 5 seconds]
-    S --> Q
-    R -->|Yes| T{Prompt Changed?}
-    T -->|Yes| U[Add 3-second Silence]
-    T -->|No| V[Stream Chunk]
-    U --> V
-    V --> W[Mark as Consumed]
-    W --> Q
+    H --> L[YouTube Content Creator]
+    L --> M[4-hour segments]
+    M --> N[Manual YouTube Upload]
     
-    H --> X[Monitor Buffer Health]
-    H --> Y[Monitor Process Health]
-    X --> Z{Health Status}
-    Z -->|HEALTHY| AA[120s Cooldown]
-    Z -->|WARNING| BB[60s Cooldown]
-    Z -->|CRITICAL/EMERGENCY| CC[No Cooldown]
-    Z -->|DEPLETED| DD[Emergency Shutdown]
+    O[Cron Scheduler] --> D
+    O --> P[2x per week generation]
+    O --> Q[Weekly YouTube content]
     
-    style F fill:#f9f,stroke:#333,stroke-width:2px
-    style G fill:#9f9,stroke:#333,stroke-width:2px
-    style H fill:#99f,stroke:#333,stroke-width:2px
-    style D fill:#ff9,stroke:#333,stroke-width:2px
+    style A fill:#ff9,stroke:#333,stroke-width:2px
+    style D fill:#f9f,stroke:#333,stroke-width:2px
+    style H fill:#9f9,stroke:#333,stroke-width:2px
+    style C fill:#99f,stroke:#333,stroke-width:2px
 ```
 
-## Rolling Buffer System Details
+## Content Library System Details
 
-### **File Management Strategy**
+### **Directory Structure**
 ```
-/audio_buffer/ (Always exactly 1,440 files)
-├── chunk_001_prompt_0_60s.wav    # Oldest file (will be deleted first)
-├── chunk_002_prompt_0_60s.wav
-├── ...
-├── chunk_060_prompt_0_60s.wav    # End of first hour (prompt 0)
-├── chunk_061_prompt_1_60s.wav    # Start of second hour (prompt 1) + 3-sec break
-├── ...
-├── chunk_1440_prompt_X_60s.wav   # Newest file
-└── buffer_metadata.json          # Tracks all file states
-```
-
-### **Rolling Deletion Logic**
-```python
-# When buffer is full (1,440 files):
-if len(buffer) >= 1440:
-    delete_oldest_file()        # Remove chunk_001_*
-    add_new_file()             # Add chunk_1441_*
-    update_metadata()          # Keep JSON in sync
-    
-# Result: Always exactly 1,440 files, continuously refreshed
+/content_library/
+├── base_content/           # 86,400 × 30s files (1 month base)
+│   ├── chunk_001_30s.wav
+│   ├── chunk_002_30s.wav
+│   └── ...
+├── weekly_additions/       # 240 × 30s files per week
+│   ├── week_2024_W01_chunk_001_30s.wav
+│   └── ...
+├── stitched_streams/       # Pre-built continuous streams
+│   ├── morning_stream_6h.wav
+│   ├── day_stream_8h.wav
+│   ├── evening_stream_6h.wav
+│   ├── night_stream_4h.wav
+│   └── youtube_content_4h.wav
+└── library_metadata.json  # Complete content catalog
 ```
 
-### **Prompt Rotation System**
-- **Duration**: Each prompt plays for exactly 1 hour (60 chunks)
-- **Rotation**: 10 prompts cycle every 10 hours, then repeat
-- **3-Second Breaks**: Added only when prompt changes (every 60th chunk)
-- **Seamless Within Prompt**: No breaks between chunks of same prompt
+### **Generation Strategy**
+- **Chunk Duration**: 30 seconds (AudioCraft's optimal length)
+- **Weekly Target**: 240 chunks = 2 hours of new content
+- **Session Size**: 24 chunks per session (12 minutes of audio)
+- **Sessions per Week**: 10 sessions to complete weekly target
+- **Cron Schedule**: 2 sessions per week (Monday & Thursday)
 
-### **Buffer Health States**
-| State | Hours Remaining | Cooldown | Behavior |
-|-------|----------------|----------|----------|
-| **HEALTHY** | >24 hours | 120 seconds | Normal operation |
-| **WARNING** | 12-24 hours | 60 seconds | Faster generation |
-| **CRITICAL** | 6-12 hours | 0 seconds | Continuous generation |
-| **EMERGENCY** | 2-6 hours | 0 seconds | Continuous generation |
-| **DEPLETED** | <2 hours | N/A | Emergency shutdown |
-
-**Health Calculation**: `hours_remaining = unconsumed_chunks / 60`
+### **Stream Stitching**
+- **Random Selection**: Chunks shuffled for variety while maintaining quality
+- **FFmpeg Concatenation**: Seamless stitching without gaps
+- **Multiple Segments**: Different duration streams for broadcast flexibility
+- **YouTube Preparation**: 4-hour segments ready for manual upload
 
 ## Implementation Components
 
-### **1. Bootstrap Generation** (`bootstrap_1440_files.py`)
-**Purpose**: Generate initial 1,440 files on external powerful server
-**Output**: 
-- 1,440 WAV files with proper naming convention
-- Complete `buffer_metadata.json` with all chunk information
-- Transfer instructions for main system
+### **1. Content Library Manager** (`content_library.py`)
+**Purpose**: Catalog and manage all 30-second audio chunks
+**Features**:
+- **Base Content Scanning**: Automatically catalogs existing chunks
+- **Weekly Content Integration**: Adds new generated content to library
+- **Metadata Management**: Tracks all chunks with creation time, prompts, etc.
+- **Statistics**: Provides library stats (total hours, storage, etc.)
 
-**Usage**:
-```bash
-# On powerful server (after AudioCraft setup):
-python bootstrap_1440_files.py /path/to/audiocraft
-
-# Example:
-python bootstrap_1440_files.py /home/user/audiocraft
-
-# Expected runtime: ~57 hours (2.4 min per chunk × 1,440 chunks)
-# Output: bootstrap_output/ directory with all files
-```
-
-**Setup Requirements**:
-1. AudioCraft repository cloned and installed
-2. Virtual environment at `audiocraft/my_venv/`
-3. Bootstrap script in any directory
-
-### **2. Rolling Buffer Manager** (`buffer_manager.py`)
-**Key Features**:
-- **Startup Scan**: Automatically detects and catalogs existing files
-- **Metadata Rebuild**: Reconstructs metadata.json from files if corrupted
-- **Rolling Deletion**: Maintains exactly 1,440 files maximum
-- **Health Monitoring**: Calculates buffer state based on unconsumed files
-
-**Core Methods**:
-- `add_chunk()`: Adds new file, deletes oldest if buffer full
-- `get_next_chunk()`: Returns next file for streaming
-- `get_buffer_status()`: Returns health state and statistics
-- `enforce_buffer_limit()`: Ensures 1,440 file maximum
-
-### **3. Continuous Audio Generator** (`audio_generator.py`)
-**New Behavior**:
-- **Always Generates**: Continuous operation regardless of buffer state
-- **Rolling Addition**: New chunks replace oldest automatically
-- **Adaptive Cooldown**: Variable sleep based on buffer health
-- **Prompt Sequencing**: Handles 60-chunk prompt blocks automatically
-
-**Generation Loop**:
+**Key Methods**:
 ```python
-while True:
-    status = check_buffer_health()
-    prompt = get_next_prompt()           # Handles rotation
-    chunk = generate_1min_audio(prompt)
-    add_to_rolling_buffer(chunk)         # Auto-deletes oldest
-    sleep(cooldown_based_on_health)
+scan_base_content()        # Catalog existing base content
+add_weekly_content()       # Add new weekly generated chunks
+get_all_chunks()          # Retrieve all available chunks
+get_library_stats()       # Get comprehensive statistics
 ```
 
-### **4. Stream Feeder** (`stream_feeder.py`)
-**Unchanged Core Logic**: Streams chunks sequentially with 3-second breaks between prompts
-**New Expectations**: Works with 1-minute chunks instead of 10-minute chunks
+### **2. Stream Stitcher** (`stream_stitcher.py`)
+**Purpose**: Create continuous streams from 30-second chunks
+**Features**:
+- **Flexible Duration**: Create streams of any length
+- **Random Variety**: Shuffles chunks for non-repetitive content
+- **FFmpeg Integration**: Professional audio concatenation
+- **Multiple Outputs**: Both streaming and YouTube content
 
-### **5. Configuration** (`config.py`)
+**Stream Configurations**:
+```python
+# Standard weekly segments
+morning_stream: 6 hours
+day_stream: 8 hours  
+evening_stream: 6 hours
+night_stream: 4 hours
+
+# YouTube content
+youtube_content: 4 hours (weekly)
+```
+
+### **3. Scheduled Generator** (`scheduled_generator.py`)
+**Purpose**: Generate 240 chunks per week via cron scheduling
+**Features**:
+- **Session-Based**: 24 chunks per session for manageable generation
+- **Progress Tracking**: Monitors weekly completion progress
+- **Cron Integration**: Designed for automated scheduling
+- **Prompt Rotation**: Cycles through all 10 Indian lofi prompts
+
+**Generation Schedule**:
+```python
+# Cron configuration
+0 2 * * 1,4  # Monday & Thursday at 2 AM
+# Generates 24 chunks per session
+# 10 sessions per week = 240 chunks total
+```
+
+### **4. Updated Configuration** (`config.py`)
 ```python
 # Core Settings
-CHUNK_DURATION = 60              # 1-minute chunks
-MAX_BUFFER_FILES = 1440          # Fixed buffer size
-CHUNKS_PER_PROMPT = 60           # 1 hour per prompt
+CHUNK_DURATION = 30              # 30-second chunks
+BASE_CONTENT_FILES = 86400       # 1 month of base content
+WEEKLY_GENERATION_FILES = 240    # 2 hours per week
+CHUNKS_PER_SESSION = 24          # 24 chunks per generation session
 
-# Cooldown System (replaces old break system)
-COOLDOWN_TIMINGS = {
-    "HEALTHY": 120,              # 2 minutes between generations
-    "WARNING": 60,               # 1 minute between generations
-    "CRITICAL": 0,               # Continuous generation
-    "EMERGENCY": 0               # Continuous generation
-}
+# Stream Stitching
+STREAM_SEGMENT_HOURS = [6, 8, 6, 4]  # Flexible stream durations
+YOUTUBE_CONTENT_HOURS = 4             # Weekly YouTube content
 
-# Health Thresholds (unchanged)
-TARGET_BUFFER_HOURS = 24
-WARNING_BUFFER_HOURS = 12
-CRITICAL_BUFFER_HOURS = 6
-EMERGENCY_BUFFER_HOURS = 2
+# Performance (30-second chunks)
+GENERATION_TIME_PER_CHUNK = 6 * 60   # 6 minutes per 30-second chunk
+FILE_SIZE_MB = 1.9                   # MB per 30-second chunk
+```
+
+### **5. Main Orchestrator** (`main.py`)
+**Purpose**: Coordinate all system components
+**Commands**:
+```bash
+python main.py setup          # Initial library setup
+python main.py status         # Show system status
+python main.py generate       # Generate weekly content
+python main.py streams        # Create stitched streams
+python main.py youtube        # Create YouTube content
+python main.py full-setup     # Complete setup process
 ```
 
 ## Setup and Deployment
 
-### **Phase 1: Bootstrap Generation**
-1. **Setup External Server** (powerful machine for initial generation)
-2. **Install AudioCraft** on external server:
+### **Phase 1: Base Content Preparation**
+1. **Generate Base Content** (86,400 × 30-second chunks):
    ```bash
-   # Clone AudioCraft
-   git clone https://github.com/facebookresearch/audiocraft
-   cd audiocraft
-   
-   # Create virtual environment
-   python -m venv my_venv
-   source my_venv/bin/activate
-   
-   # Install AudioCraft
-   pip install -e .
-   ```
-3. **Copy Bootstrap Script** to external server:
-   ```bash
-   scp bootstrap_1440_files.py external-server:/path/to/bootstrap/
-   ```
-4. **Run Bootstrap Script**:
-   ```bash
-   # On external server
-   python bootstrap_1440_files.py /path/to/audiocraft
-   # Wait ~57 hours for completion
-   ```
-5. **Transfer Files to Main System**:
-   ```bash
-   # Transfer audio files
-   rsync -av bootstrap_output/*.wav mainserver:/root/home_projects/youtube-stream/audio_buffer/
-   
-   # Transfer metadata
-   scp bootstrap_output/buffer_metadata.json mainserver:/root/home_projects/youtube-stream/audio_buffer/
+   # Use AudioCraft to generate base content
+   # This is a one-time massive generation (estimated 8,640 hours = 360 days)
+   # Recommend using multiple GPU instances in parallel
    ```
 
-### **Phase 2: Main System Startup**
-1. **Verify File Transfer**: Ensure 1,440 files in `audio_buffer/`
-2. **Start System**:
+2. **Directory Setup**:
+   ```bash
+   mkdir -p /root/home_projects/youtube-stream/content_library/{base_content,weekly_additions,stitched_streams}
+   
+   # Copy your existing 4 days of content
+   cp /path/to/existing/chunks/* /root/home_projects/youtube-stream/content_library/base_content/
+   ```
+
+3. **Initial Library Setup**:
    ```bash
    cd /root/home_projects/youtube-stream
-   python main.py full
+   python main.py setup
    ```
-3. **System Behavior**:
-   - Buffer manager scans existing files
-   - Stream feeder begins immediate playback
-   - Generator starts rolling refresh cycle
 
-### **Phase 3: Continuous Operation**
-- **Rolling Refresh**: ~1 new file every 2.4 minutes (at current generation speed)
-- **Daily Replacement**: ~600 files replaced per day (41% of buffer)
-- **Weekly Cycle**: Complete buffer refresh every ~2.4 days
-- **CPU Management**: Automatic cooldowns prevent 100% CPU usage
+### **Phase 2: Automated Generation Setup**
+1. **Configure Cron for Weekly Generation**:
+   ```bash
+   # Edit crontab
+   crontab -e
+   
+   # Add these lines:
+   # Generate 24 chunks twice per week (Monday & Thursday at 2 AM)
+   0 2 * * 1,4 cd /root/home_projects/youtube-stream && python scheduled_generator.py session
+   
+   # Create YouTube content weekly (Sunday at 1 AM)
+   0 1 * * 0 cd /root/home_projects/youtube-stream && python main.py youtube
+   ```
+
+2. **Test Generation**:
+   ```bash
+   # Test single session generation
+   python scheduled_generator.py session
+   
+   # Check weekly progress
+   python scheduled_generator.py progress
+   ```
+
+### **Phase 3: Stream Creation**
+1. **Create Initial Streams**:
+   ```bash
+   # Create stitched streams for broadcasting
+   python main.py streams
+   ```
+
+2. **Test YouTube Content**:
+   ```bash
+   # Create 4-hour YouTube content
+   python main.py youtube
+   ```
 
 ## Performance Characteristics
 
 ### **Storage Requirements**
-- **Fixed Size**: ~4.3GB total (1,440 × 3MB per file)
-- **No Growth**: Storage usage remains constant
-- **Predictable**: No cleanup or maintenance required
+- **Base Content**: ~164GB (86,400 × 1.9MB files)
+- **Weekly Growth**: ~456MB per week (240 × 1.9MB)
+- **Annual Growth**: ~24GB per year
+- **Stitched Streams**: Additional ~50GB for pre-built segments
 
 ### **Generation Performance**
-- **Current Speed**: 2.4 minutes per 1-minute chunk (0.42x realtime)
-- **Daily Output**: ~600 new chunks (10 hours of fresh content)
-- **Buffer Refresh Rate**: Complete turnover every 2.4 days
-- **CPU Usage**: Reduced due to cooldown periods
+- **Current Speed**: 6 minutes per 30-second chunk (0.083x realtime)
+- **Weekly Target**: 240 chunks (2 hours of audio)
+- **Generation Time**: 24 hours total per week (spread across 10 sessions)
+- **Sustainability**: 2 hours generated vs 168 hours consumed (1-month buffer provides safety)
 
-### **Stream Characteristics**
-- **Immediate Start**: No waiting for initial generation
-- **Continuous Play**: 1 week of content always available (7-day safety buffer)
-- **Prompt Blocks**: 1-hour segments per musical style
-- **Seamless Transitions**: 3-second breaks only between prompts
-- **Self-Sustaining**: 2 hours generated daily vs 24 hours consumed
+### **Content Characteristics**
+- **Chunk Duration**: 30 seconds (optimal for AudioCraft)
+- **Prompt Rotation**: 10 Indian lofi prompts cycling
+- **Stream Variety**: Random chunk selection prevents repetition
+- **Quality**: Consistent 32kHz sample rate, professional loudness
 
-## Monitoring and Health
+## Monitoring and Management
 
-### **Buffer Health Indicators**
+### **System Status**
 ```bash
-# Check current status
-python -c "from buffer_manager import BufferManager; print(BufferManager().get_buffer_status())"
-
-# Expected output:
-{
-  "total_files": 1440,
-  "available_chunks": 1200,
-  "hours_remaining": 20.0,
-  "health": "HEALTHY",
-  "cooldown_seconds": 120,
-  "buffer_full": true
-}
-```
-
-### **System Monitoring**
-- **File Count**: Always exactly 1,440 files
-- **Health State**: HEALTHY → WARNING → CRITICAL → EMERGENCY → DEPLETED
-- **Generation Rate**: ~1 file per 2.4 minutes
-- **Consumption Rate**: 1 file per minute (during streaming)
-- **Buffer Runway**: Hours of content remaining
-
-## Troubleshooting
-
-### **Common Issues**
-1. **Buffer Not 1,440 Files**
-   - Check file transfer completion
-   - Verify buffer_manager.py enforcement logic
-   - Rebuild metadata: `python -c "from buffer_manager import BufferManager; BufferManager().rebuild_metadata_from_files()"`
-
-2. **Generation Stopped**
-   - Check buffer health state
-   - Verify AudioCraft installation
-   - Check disk space and permissions
-
-3. **Metadata Corruption**
-   - System auto-rebuilds from files on startup
-   - Manual rebuild: Delete `buffer_metadata.json`, restart system
-
-4. **Stream Gaps**
-   - Verify 3-second breaks only occur between prompts
-   - Check chunk consumption rate vs generation rate
-
-### **Debug Commands**
-```bash
-# Check buffer status
+# Check comprehensive system status
 python main.py status
 
-# List buffer files
-ls -la audio_buffer/*.wav | wc -l  # Should be 1440
+# Expected output:
+Content Library:
+  Total content: 720.0 hours (30.0 days)
+  Base content: 86400 chunks
+  Weekly additions: 240 chunks (1 weeks)
+  Storage used: 164.5 GB
 
-# Check metadata
-python -c "import json; print(json.load(open('audio_buffer/buffer_metadata.json'))['chunks'][:5])"
+Weekly Generation:
+  Week: 2024_W01
+  Progress: 48/240 chunks (20.0%)
+  Sessions remaining: 8
 
-# Test single generation
-python -c "from audio_generator import AudioGenerator; AudioGenerator().generate_chunk('test prompt', '/tmp/test.wav')"
+Readiness:
+  24/7 Streaming: ✅ Ready
+  YouTube Content: ✅ Ready
 ```
 
-## Future Enhancements
+### **Content Management**
+```bash
+# Library statistics
+python -c "from content_library import ContentLibrary; print(ContentLibrary().get_library_stats())"
 
-### **Phase 2: YouTube Live Integration**
-- FFmpeg integration for real streaming
-- Animation loop overlay
-- Stream health monitoring
+# Weekly progress
+python scheduled_generator.py progress
 
-### **Phase 3: Advanced Features**
-- Web dashboard for monitoring
-- Multiple quality streams
-- Automated clip generation
-- Analytics and metrics
+# Create test stream
+python -c "from stream_stitcher import StreamStitcher; StreamStitcher().create_stream_segment(1, 'test')"
+```
+
+## Workflow Integration
+
+### **Weekly Routine**
+1. **Monday & Thursday**: Automated generation (24 chunks each)
+2. **Sunday**: Automated YouTube content creation (4 hours)
+3. **Manual**: Upload YouTube content to channel
+4. **As Needed**: Create new stitched streams for variety
+
+### **Content Pipeline**
+```
+AudioCraft → 30s Chunks → Content Library → Stream Stitcher → Live Stream
+                    ↓
+              Weekly Additions → YouTube Content → Manual Upload
+```
 
 ## File Structure
 ```
 youtube-stream/
 ├── config.py                    # System configuration
-├── buffer_manager.py             # Rolling buffer management
-├── audio_generator.py            # Continuous generation
-├── stream_feeder.py              # Chunk streaming
-├── main.py                      # System orchestrator
-├── bootstrap_1440_files.py      # Initial file generation
-├── requirements.txt             # Python dependencies
-├── .gitignore                   # Git exclusions
-├── README.md                    # This file
-└── audio_buffer/                # 1,440 audio files + metadata
-    ├── chunk_001_prompt_0_60s.wav
-    ├── chunk_002_prompt_0_60s.wav
-    ├── ...
-    ├── chunk_1440_prompt_X_60s.wav
-    └── buffer_metadata.json
+├── content_library.py           # Content library management
+├── stream_stitcher.py           # Stream creation from chunks
+├── scheduled_generator.py       # Weekly content generation
+├── main.py                     # System orchestrator
+├── requirements.txt            # Python dependencies
+├── .gitignore                  # Git exclusions
+├── README.md                   # This file
+├── archive/                    # Old rolling buffer system
+│   ├── buffer_manager.py
+│   ├── stream_feeder.py
+│   ├── main.py (old)
+│   └── audio_generator.py
+├── aws_seed/                   # Bootstrap generation scripts
+│   ├── bootstrap_continuous.py
+│   └── validate_prompts_fixed.py
+└── content_library/            # Content storage
+    ├── base_content/           # 86,400 × 30s base files
+    ├── weekly_additions/       # Weekly generated content
+    ├── stitched_streams/       # Pre-built continuous streams
+    └── library_metadata.json  # Content catalog
 ```
 
 ## Success Metrics
-- ✅ **Fixed Buffer Size**: Exactly 1,440 files maintained
-- ✅ **Continuous Operation**: 24/7 streaming without interruption
-- ✅ **Rolling Refresh**: Oldest content automatically replaced
-- ✅ **CPU Efficiency**: Cooldown periods prevent overload
-- ✅ **Instant Startup**: No waiting for initial generation
-- ✅ **Predictable Storage**: Constant 4.3GB usage
-- ✅ **Seamless Playback**: 1-hour prompt blocks with minimal breaks
+- ✅ **Sustainable Generation**: 2 hours/week vs 168 hours consumption
+- ✅ **Optimal Chunk Size**: 30 seconds (AudioCraft sweet spot)
+- ✅ **Massive Content Library**: 1 month base + growing weekly additions
+- ✅ **Automated Pipeline**: Cron-scheduled generation and content creation
+- ✅ **Flexible Streaming**: Multiple pre-stitched segment options
+- ✅ **YouTube Integration**: Weekly 4-hour content ready for upload
+- ✅ **Storage Efficient**: Predictable growth (~24GB/year)
 
-The system transforms from a growing buffer with batch generation to a **fixed-size rolling buffer with continuous refresh**, providing reliable 24/7 operation with predictable resource usage.
+## Migration from Old System
 
-## Performance Summary
-- **Generation**: 120 files/day (2 hours audio) at 12 min/chunk
-- **Consumption**: 1,440 files/day (24 hours audio) during streaming  
-- **Buffer Size**: 5.47GB (1,440 × 3.8MB files)
-- **Safety Margin**: 7-day runway if generation stops
-- **Refresh Cycle**: Complete buffer turnover every 12 days
+The previous rolling buffer system has been archived in `archive/` directory. Key changes:
+
+**Old System** → **New System**
+- Rolling 10,080 files → Accumulating library (86,400+ files)
+- 1-minute chunks → 30-second chunks (AudioCraft optimal)
+- Continuous generation → Scheduled weekly generation
+- Real-time streaming → Pre-stitched stream segments
+- Unsustainable (2h gen vs 24h consumption) → Sustainable (1-month buffer)
+
+## Future Enhancements
+
+### **Phase 2: Live Streaming Integration**
+- FFmpeg RTMP streaming to YouTube Live
+- Automated stream segment rotation
+- Real-time health monitoring
+
+### **Phase 3: Advanced Features**
+- Web dashboard for content management
+- Automated YouTube upload via API
+- Multiple quality streams
+- Advanced chunk selection algorithms
+- Analytics and engagement metrics
+
+The system transforms from an unsustainable rolling buffer to a **sustainable content library with massive safety margins**, providing reliable 24/7 operation with predictable resource usage and automated content creation.
